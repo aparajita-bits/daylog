@@ -1,5 +1,6 @@
 # daylog
 
+[![Website](https://img.shields.io/badge/website-aparajita--bits.github.io%2Fdaylog-a8672a)](https://aparajita-bits.github.io/daylog/)
 [![CI](https://github.com/aparajita-bits/daylog/actions/workflows/ci.yml/badge.svg)](https://github.com/aparajita-bits/daylog/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)

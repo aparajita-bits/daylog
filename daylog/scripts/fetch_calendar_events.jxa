@@ -1,0 +1,62 @@
+// JXA (JavaScript for Automation) helper: dump macOS Calendar.app events for one
+// day as JSON, for daylog's calendar sweep (Component 5).
+//
+// Usage: osascript -l JavaScript fetch_calendar_events.jxa 2026-07-10
+//
+// NOTE: "declined" detection is best-effort. Calendar.app's scripting bridge
+// exposes an event-level `status` (`canceled`/`confirmed`/`tentative`/`none`)
+// which reflects the *event's* status, not reliably "did I personally decline
+// this invite" for every account type (Exchange/Google/iCloud differ). If this
+// doesn't work well for your calendars, `icalBuddy` is the documented
+// alternative backend (see calendar_sync.py).
+//
+// Never throws past this point in a way that leaves invalid stdout: any
+// failure results in an empty JSON array so the Python side degrades to "no
+// events found" rather than crashing the sweep.
+
+function run(argv) {
+  try {
+    const targetDateStr = argv[0];
+    const [y, m, d] = targetDateStr.split("-").map(Number);
+    const dayStart = new Date(y, m - 1, d, 0, 0, 0);
+    const dayEnd = new Date(y, m - 1, d, 23, 59, 59);
+
+    const Calendar = Application("Calendar");
+    const results = [];
+
+    const calendars = Calendar.calendars();
+    for (const cal of calendars) {
+      let events;
+      try {
+        events = cal.events.whose({
+          _and: [
+            { startDate: { _lessThan: dayEnd } },
+            { endDate: { _greaterThan: dayStart } },
+          ],
+        })();
+      } catch (e) {
+        continue; // some calendars (e.g. birthdays) don't support this query
+      }
+
+      for (const ev of events) {
+        try {
+          results.push({
+            uid: ev.uid(),
+            title: ev.summary(),
+            start: new Date(ev.startDate()).toISOString(),
+            end: new Date(ev.endDate()).toISOString(),
+            all_day: ev.alldayEvent(),
+            status: String(ev.status()),
+            calendar: cal.name(),
+          });
+        } catch (e) {
+          continue; // skip events whose properties can't be read
+        }
+      }
+    }
+
+    return JSON.stringify(results);
+  } catch (e) {
+    return "[]";
+  }
+}

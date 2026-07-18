@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Ubuntu is enough to validate the pure-Python core (store, analytics,
+    # infer, backfill, checkpoint dispatch, etc). The macOS-only surface —
+    # JXA calendar sync, Notes.app delivery, the Übersicht widget, launchd
+    # reminders — degrades gracefully (best-effort, [] / False on any
+    # subprocess failure) rather than being exercised for real here; see
+    # README's Platform support section.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -q

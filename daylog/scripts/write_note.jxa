@@ -1,0 +1,39 @@
+// JXA (JavaScript for Automation) helper: create a note in Notes.app, for
+// daylog's morning-brief digest.
+//
+// Usage: osascript -l JavaScript write_note.jxa "<title>" "<body>"
+//
+// Notes.app derives a note's displayed title from the first line of its
+// body -- there's no separate settable "name" reliable across macOS
+// versions -- so the title is prepended as the body's first line rather
+// than passed as its own property.
+//
+// NOTE: this needs a live run to verify against your actual Notes.app setup
+// (which account/folder `defaultAccount()` resolves to, and whether Notes
+// prompts for Automation permission on first run) -- run
+// `dl morning-brief` by hand once and check Notes.app before trusting the
+// unattended launchd poller. Any failure here results in a non-zero exit
+// and no note; the Python side treats that as "delivery failed" and retries
+// on its own next poll, so a scripting hiccup never blocks anything else.
+//
+// Never throws past this point in a way that leaves invalid stdout: any
+// failure prints nothing and exits non-zero rather than crashing loudly.
+
+function run(argv) {
+  try {
+    const title = argv[0] || "daylog";
+    const bodyText = argv[1] || "";
+    const fullBody = title + "\n\n" + bodyText;
+
+    const Notes = Application("Notes");
+    Notes.includeStandardAdditions = true;
+
+    const account = Notes.defaultAccount();
+    const folder = account.folders[0];
+    Notes.make({ new: "note", at: folder, withProperties: { body: fullBody } });
+
+    return "ok";
+  } catch (e) {
+    return "";
+  }
+}

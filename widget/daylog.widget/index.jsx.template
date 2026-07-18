@@ -1,0 +1,578 @@
+// daylog desktop widget for Übersicht (https://tracesof.net/uebersicht/).
+//
+// This is a .template — install_widget.sh substitutes {{DL_PATH}} with the
+// resolved absolute path to `dl` and writes the result into Übersicht's
+// widgets folder. Editing the rendered copy directly works too (Übersicht
+// hot-reloads on save), but re-running install_widget.sh will overwrite it.
+//
+// Positioned bottom-right by default. Click-and-drag the widget by its
+// header to move it anywhere — position is remembered (localStorage)
+// across refreshes and Übersicht restarts. If dragging doesn't work in
+// your Übersicht version, just edit right/bottom below directly instead.
+//
+// Deliberately avoids Übersicht's initialState/updateState/dispatchAction
+// reducer API — it didn't wire up in testing (state came back undefined).
+// Everything here is plain DOM + the well-established `run()` helper. That
+// also means NOTHING here can rely on React re-rendering on click (nothing
+// triggers Übersicht to re-invoke `render` outside of the 5-minute
+// `command` refresh) — every interactive element (body content, tab pill
+// highlighting, background style) is kept in sync by directly mutating the
+// already-mounted DOM nodes, via module-scope refs captured once on mount.
+// (Earlier version of this file only did this for body content and missed
+// the tab pills themselves — they'd stay visually stuck on whichever tab
+// was active at the last real `render()` pass even after clicking a
+// different one, while the body content underneath *had* switched. Fixed
+// by tracking refs to the tab buttons too — see tabNodes/syncTabStyles.)
+
+import { run } from "uebersicht";
+
+const DL_PATH = "{{DL_PATH}}";
+const POSITION_KEY = "daylog-widget-position";
+const STYLE_KEY = "daylog-widget-bgstyle";
+
+// Cycled by the small palette (🎨) button in the header. "Dark" matches
+// this widget's original look; the others sit better alongside macOS's own
+// white/frosted native widgets (Calendar, Clock, Weather) instead of
+// clashing as one solid dark block among them. Persisted in localStorage,
+// same pattern as drag position.
+const BG_PRESETS = [
+  { name: "Dark", background: "rgba(22, 20, 34, 0.92)", blur: false },
+  { name: "Frosted", background: "rgba(30, 30, 40, 0.5)", blur: true },
+  { name: "Glass", background: "rgba(255, 255, 255, 0.14)", blur: true },
+  { name: "Transparent", background: "transparent", blur: false },
+];
+
+export const command = `${DL_PATH} day --json 2>/dev/null || echo '{}'`;
+
+export const refreshFrequency = 5 * 60 * 1000; // 5 minutes
+
+export const className = `
+  right: 24px;
+  bottom: 24px;
+  width: 300px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  background: rgba(22, 20, 34, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  color: rgba(255,255,255,0.92);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease;
+
+  @keyframes daylogPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+  .daylog-pulse { animation: daylogPulse 1.6s ease-in-out infinite; }
+`;
+
+const CATEGORY_COLORS = {
+  coding: "#7dd3fc",
+  meeting: "#fca5a5",
+  discussion: "#fcd34d",
+  review: "#c4b5fd",
+  firefighting: "#fb7185",
+  learning: "#86efac",
+  admin: "#94a3b8",
+  other: "#a1a1aa",
+};
+
+const fmtHours = (min) => Math.round((min / 60) * 10) / 10;
+
+// Safe POSIX single-quote shell escaping — neutralizes shell metacharacters
+// in whatever the user types before it's handed to `run()`.
+const shellEscape = (str) => `'${String(str).replace(/'/g, `'\\''`)}'`;
+
+const ESCAPE_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
+
+// Übersicht's webview blocks both the async Clipboard API and
+// document.execCommand("copy") (confirmed: both silently fail there,
+// regardless of secure-context/permissions handling) — so this shells out
+// to macOS's own `pbcopy` via the `run()` helper instead, the same way
+// every other side effect in this widget already reaches the OS. The text
+// is base64-encoded before hitting the shell so arbitrary standup content
+// (quotes, backticks, `$`, newlines, markdown) never needs shell-escaping —
+// `unescape(encodeURIComponent(text))` is the standard trick for making
+// `btoa` UTF-8-safe (btoa alone only handles Latin1). `base64 -D` is
+// macOS/BSD base64's decode flag (not `-d`, which is the GNU/Linux
+// coreutils spelling) — fine here since this widget is macOS-only anyway.
+const copyToClipboard = (text) => {
+  try {
+    const b64 = btoa(unescape(encodeURIComponent(text)));
+    return run(`echo ${b64} | base64 -D | pbcopy`)
+      .then(() => true)
+      .catch(() => false);
+  } catch (e) {
+    return Promise.resolve(false);
+  }
+};
+
+// Shared by drag-to-move and the background-style button: walks up from a
+// node inside the widget to the actual element Übersicht positions/styles.
+// Best-effort, not a documented API — falls back gracefully if the DOM
+// shape isn't what's expected.
+const findWrapper = (node) => {
+  if (!node) return null;
+  return node.closest('[id^="daylog"]') || node.parentElement?.parentElement || null;
+};
+
+const applyBackgroundPreset = (wrapper, index) => {
+  if (!wrapper) return;
+  const preset = BG_PRESETS[index] || BG_PRESETS[0];
+  wrapper.style.background = preset.background;
+  wrapper.style.backdropFilter = preset.blur ? "blur(24px)" : "none";
+  wrapper.style.webkitBackdropFilter = preset.blur ? "blur(24px)" : "none";
+};
+
+const loadBackgroundIndex = () => {
+  const saved = parseInt(localStorage.getItem(STYLE_KEY), 10);
+  return Number.isInteger(saved) && saved >= 0 && saved < BG_PRESETS.length ? saved : 0;
+};
+
+// Best-effort drag-to-move: repositions the wrapper directly via inline
+// style, bypassing React entirely so it stays smooth. Also applies the
+// saved background preset on first attach, since it already resolves the
+// wrapper reliably. Falls back to silently doing nothing if the DOM shape
+// isn't what's expected — neither dragging nor styling working shouldn't
+// break the rest of the widget.
+const attachDrag = (headerNode) => {
+  if (!headerNode) return;
+  const wrapper = findWrapper(headerNode);
+  if (!wrapper || wrapper._daylogDragAttached) return;
+  wrapper._daylogDragAttached = true;
+  wrapper.style.position = wrapper.style.position || "fixed";
+
+  applyBackgroundPreset(wrapper, loadBackgroundIndex());
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+    if (saved && typeof saved.left === "number" && typeof saved.top === "number") {
+      wrapper.style.right = "auto";
+      wrapper.style.bottom = "auto";
+      wrapper.style.left = `${saved.left}px`;
+      wrapper.style.top = `${saved.top}px`;
+    }
+  } catch (e) {
+    // ignore corrupt/missing saved position
+  }
+
+  headerNode.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    const rect = wrapper.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+
+    const onMove = (moveEvent) => {
+      wrapper.style.right = "auto";
+      wrapper.style.bottom = "auto";
+      wrapper.style.left = `${moveEvent.clientX - offsetX}px`;
+      wrapper.style.top = `${moveEvent.clientY - offsetY}px`;
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      const finalRect = wrapper.getBoundingClientRect();
+      localStorage.setItem(POSITION_KEY, JSON.stringify({ left: finalRect.left, top: finalRect.top }));
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+};
+
+// Module-scope cache: survives across the periodic 5-min `render`
+// re-invocations (the module itself isn't reloaded each cycle, only
+// `render` is re-called with fresh `output`). Holds which period is
+// selected and on-demand-fetched week data, since a tab click doesn't
+// trigger Übersicht to re-run `command`/`render` on its own. AI insights
+// aren't rendered in-widget at all (300px is too small to read prose
+// comfortably) — see the Expand button, which opens `dl view` instead.
+const widgetCache = {
+  period: "day", // "day" | "week"
+  dayData: null, // latest parsed `dl day --json` (refreshed every 5 min via command)
+  weekData: null, // cached `dl week --json`, fetched on demand
+  dayLabel: "", // e.g. "Saturday, July 18" -- recomputed each render() from dayData.date
+};
+
+// React only (re-)invokes a ref callback when the underlying DOM node's
+// identity changes — not on every periodic `render()` call, and never on a
+// plain click — so these are kept at module scope and mutated directly by
+// click handlers instead of relying on a re-render to reflect state.
+let bodyDomNode = null;
+let headerLabelDomNode = null;
+const tabNodes = { day: null, week: null };
+
+const tabStyleFor = (active) => ({
+  background: active ? "rgba(255,255,255,0.16)" : "transparent",
+  color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
+});
+
+// Keeps the Day/Week tab pills' highlighting in sync with widgetCache —
+// must be called any time widgetCache.period changes, since nothing else
+// will repaint them (see the big comment at the top of this file).
+const syncTabStyles = () => {
+  const apply = (node, active) => {
+    if (!node) return;
+    const s = tabStyleFor(active);
+    node.style.background = s.background;
+    node.style.color = s.color;
+  };
+  apply(tabNodes.day, widgetCache.period === "day");
+  apply(tabNodes.week, widgetCache.period === "week");
+};
+
+// Same fix, same reason as syncTabStyles: the header label ("Saturday, July
+// 18" vs. "This week") is plain text driven by widgetCache.period, and
+// clicking a tab doesn't trigger a React re-render — this was previously
+// only updated during an actual render() pass (e.g. the 5-min refresh),
+// so it went stale exactly like the tab pills used to.
+const syncHeaderLabel = () => {
+  if (!headerLabelDomNode) return;
+  headerLabelDomNode.textContent = widgetCache.period === "day" ? widgetCache.dayLabel : "This week";
+};
+
+const buildStatsBarsHTML = (categoryMin) => {
+  const categories = Object.entries(categoryMin || {}).sort((a, b) => b[1] - a[1]);
+  if (!categories.length) {
+    return `<div style="font-size:12px;opacity:0.5;margin-top:16px;">nothing logged yet</div>`;
+  }
+  const maxMin = categories[0][1] || 1;
+  const rows = categories
+    .map(
+      ([cat, min]) => `
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:76px;font-size:12px;opacity:0.75;text-transform:capitalize;">${escapeHtml(cat)}</div>
+        <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,0.1);overflow:hidden;">
+          <div style="width:${Math.max(6, (min / maxMin) * 100)}%;height:100%;border-radius:3px;background:${
+        CATEGORY_COLORS[cat] || "#a1a1aa"
+      };"></div>
+        </div>
+        <div style="width:34px;font-size:11px;opacity:0.6;text-align:right;">${fmtHours(min)}h</div>
+      </div>`
+    )
+    .join("");
+  return `<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">${rows}</div>`;
+};
+
+const buildTotalHTML = (totalMin, label) => `
+  <div style="font-size:40px;font-weight:600;margin-top:6px;line-height:1;">
+    ${Math.floor(totalMin / 60)}<span style="font-size:20px;opacity:0.6;">h</span>
+    ${totalMin % 60}<span style="font-size:20px;opacity:0.6;">m</span>
+  </div>
+  <div style="font-size:13px;opacity:0.6;margin-top:2px;">${escapeHtml(label)}</div>
+`;
+
+const buildGapNudgeHTML = () => {
+  const gaps = (widgetCache.dayData && widgetCache.dayData.gaps) || [];
+  if (!gaps.length) return "";
+  const unaccountedH = fmtHours((widgetCache.dayData && widgetCache.dayData.unaccounted_min) || 0);
+  return `<div style="margin-top:14px;font-size:11px;opacity:0.6;">
+    ${gaps.length} gap${gaps.length > 1 ? "s" : ""} unfilled (~${unaccountedH}h) — type below to log the most recent one
+  </div>`;
+};
+
+const renderBody = (bodyNode) => {
+  if (!bodyNode) return;
+
+  if (widgetCache.period === "day") {
+    const data = widgetCache.dayData || {};
+    bodyNode.innerHTML =
+      buildTotalHTML(data.total_captured_min || 0, "captured today") +
+      buildStatsBarsHTML(data.category_min) +
+      buildGapNudgeHTML();
+  } else {
+    const data = widgetCache.weekData;
+    if (!data) {
+      bodyNode.innerHTML = `<div class="daylog-pulse" style="font-size:12px;opacity:0.6;margin-top:16px;">loading…</div>`;
+    } else {
+      bodyNode.innerHTML =
+        buildTotalHTML(data.total_captured_min || 0, `captured this week (${Math.round(data.capture_rate || 0)}% of scheduled)`) +
+        buildStatsBarsHTML(data.category_min);
+    }
+  }
+};
+
+const fetchWeekStats = (bodyNode) => {
+  run(`${DL_PATH} week --json 2>/dev/null`)
+    .then((out) => {
+      try {
+        widgetCache.weekData = JSON.parse(out);
+      } catch (e) {
+        widgetCache.weekData = {};
+      }
+      renderBody(bodyNode);
+    })
+    .catch(() => {
+      widgetCache.weekData = {};
+      renderBody(bodyNode);
+    });
+};
+
+const fetchWeekStatsIfNeeded = (bodyNode) => {
+  if (widgetCache.weekData) return;
+  fetchWeekStats(bodyNode);
+};
+
+// Small ghost icon buttons (reload / expand / copy), sharing one style so
+// they read as a coherent row rather than each being its own bolted-on
+// control — deliberately smaller and quieter than the old full-width
+// "Copy standup" box.
+const iconButtonStyle = {
+  flex: 1,
+  fontSize: 11,
+  textAlign: "center",
+  padding: "6px 4px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.03)",
+  color: "rgba(255,255,255,0.7)",
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+export const render = ({ output }) => {
+  let data = null;
+  try {
+    data = JSON.parse(output);
+  } catch (e) {
+    data = null;
+  }
+  if (data) widgetCache.dayData = data;
+
+  widgetCache.dayLabel = (data && data.date ? new Date(data.date + "T00:00:00") : new Date()).toLocaleDateString(
+    "en-US",
+    { weekday: "long", month: "long", day: "numeric" }
+  );
+
+  const attachBody = (node) => {
+    bodyDomNode = node;
+    // First mount only: the explicit renderBody() call below already ran
+    // with bodyDomNode still null (the ref hadn't attached yet at that
+    // point in this same render pass), so paint here once it has.
+    if (node) renderBody(node);
+  };
+
+  const attachHeaderLabel = (node) => {
+    headerLabelDomNode = node;
+    if (node) syncHeaderLabel();
+  };
+
+  // Repaint the body/header on every render pass using whichever nodes we
+  // already have. On first mount this is a no-op (the *DomNode vars are
+  // still null until the refs above fire); on every subsequent periodic
+  // refresh (new `dayData` from `command`) it keeps the existing DOM nodes
+  // in sync without depending on the ref callbacks firing again.
+  renderBody(bodyDomNode);
+  syncTabStyles();
+  syncHeaderLabel();
+
+  const selectTab = (updates) => {
+    Object.assign(widgetCache, updates);
+    syncTabStyles();
+    syncHeaderLabel();
+    if (widgetCache.period === "week") {
+      fetchWeekStatsIfNeeded(bodyDomNode);
+    }
+    renderBody(bodyDomNode);
+  };
+
+  const handleReload = (e) => {
+    const btn = e.currentTarget;
+    const original = btn.textContent;
+    btn.textContent = "↻…";
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1200);
+
+    if (widgetCache.period === "week") {
+      widgetCache.weekData = null;
+      renderBody(bodyDomNode);
+      fetchWeekStats(bodyDomNode);
+    } else {
+      run(`${DL_PATH} day --json 2>/dev/null`)
+        .then((out) => {
+          try {
+            widgetCache.dayData = JSON.parse(out);
+          } catch (err) {
+            // keep whatever we had
+          }
+          renderBody(bodyDomNode);
+        })
+        .catch(() => {});
+    }
+  };
+
+  // Opens a full, properly-typeset HTML page (`dl view`) in the default
+  // browser for whichever period is currently selected — built for reading
+  // longer AI insights comfortably instead of squinting at 300px of widget.
+  const handleExpand = (e) => {
+    const btn = e.currentTarget;
+    const original = btn.textContent;
+    btn.textContent = "opening…";
+    const weekFlag = widgetCache.period === "week" ? " --week" : "";
+    run(`${DL_PATH} view${weekFlag} 2>/dev/null`)
+      .then(() => {
+        btn.textContent = original;
+      })
+      .catch(() => {
+        btn.textContent = "failed";
+        setTimeout(() => {
+          btn.textContent = original;
+        }, 1500);
+      });
+  };
+
+  // Fetches `dl standup --ai` (yesterday + today, AI-polished — falls back
+  // to the plain template on its own if AI is unavailable, so this always
+  // resolves to something) and copies it to the clipboard, for pasting
+  // straight into Teams/Slack/wherever without opening a terminal.
+  const handleCopyStandup = (e) => {
+    const btn = e.currentTarget;
+    const original = btn.textContent;
+    const resetAfter = (label, delayMs = 1800) => {
+      btn.textContent = label;
+      setTimeout(() => {
+        btn.textContent = original;
+      }, delayMs);
+    };
+
+    btn.textContent = "…";
+    run(`${DL_PATH} standup --ai 2>/dev/null`)
+      .then((text) => {
+        const trimmed = (text || "").trim();
+        if (!trimmed) {
+          resetAfter("empty");
+          return;
+        }
+        copyToClipboard(trimmed).then((ok) => resetAfter(ok ? "✓" : "failed"));
+      })
+      .catch(() => resetAfter("failed"));
+  };
+
+  // Cycles Dark -> Frosted -> Glass -> Transparent, persisted so it survives
+  // refreshes/restarts. Applied directly to the wrapper Übersicht positions
+  // (same node drag already resolves), not via `className`, since that
+  // export is only evaluated once at load.
+  const handleCycleStyle = (e) => {
+    const wrapper = findWrapper(e.currentTarget);
+    if (!wrapper) return;
+    const next = (loadBackgroundIndex() + 1) % BG_PRESETS.length;
+    localStorage.setItem(STYLE_KEY, String(next));
+    applyBackgroundPreset(wrapper, next);
+  };
+
+  // In "fill the most recent gap" mode, submitting the log box backdates the
+  // entry into that gap's slot instead of logging it at "now" — makes
+  // gap-filling reachable without dropping to a terminal for `dl fill`.
+  const mostRecentGap = () => {
+    const gaps = (widgetCache.dayData && widgetCache.dayData.gaps) || [];
+    return gaps.length ? gaps[gaps.length - 1] : null;
+  };
+
+  const handleLogKeyDown = (e) => {
+    if (e.key !== "Enter") return;
+    const input = e.target;
+    const text = input.value.trim();
+    if (!text) return;
+    input.disabled = true;
+    const originalPlaceholder = input.placeholder;
+
+    const gap = widgetCache.period === "day" ? mostRecentGap() : null;
+    input.placeholder = gap ? `filling ${gap.start}–${gap.end}…` : "logging…";
+    const cmd = gap
+      ? `${DL_PATH} quicklog ${shellEscape(text)} --at ${gap.start} -d ${gap.span_min}`
+      : `${DL_PATH} quicklog ${shellEscape(text)}`;
+
+    run(cmd)
+      .then((out) => {
+        input.value = "";
+        input.disabled = false;
+        input.placeholder = (out || "logged").trim().slice(0, 44);
+      })
+      .catch(() => {
+        input.disabled = false;
+        input.placeholder = "couldn't log — try again";
+        setTimeout(() => {
+          input.placeholder = originalPlaceholder;
+        }, 2500);
+      });
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div
+          ref={attachDrag}
+          title="drag to move"
+          style={{
+            fontSize: 12,
+            opacity: 0.55,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            cursor: "move",
+            userSelect: "none",
+          }}
+        >
+          {/* A nested ref (attachHeaderLabel) rather than reusing attachDrag's
+              ref on this div — React only allows one ref per element, and
+              attachDrag's is already spoken for. */}
+          <span ref={attachHeaderLabel}>{widgetCache.period === "day" ? widgetCache.dayLabel : "This week"}</span>
+        </div>
+        <div
+          onClick={handleCycleStyle}
+          title="Cycle background style (Dark / Frosted / Glass / Transparent)"
+          style={{ fontSize: 13, opacity: 0.45, cursor: "pointer", padding: 4 }}
+        >
+          🎨
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+        <div ref={(n) => (tabNodes.day = n)} style={{ ...tabStyleFor(widgetCache.period === "day"), fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", userSelect: "none" }} onClick={() => selectTab({ period: "day" })}>
+          Day
+        </div>
+        <div ref={(n) => (tabNodes.week = n)} style={{ ...tabStyleFor(widgetCache.period === "week"), fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", userSelect: "none" }} onClick={() => selectTab({ period: "week" })}>
+          Week
+        </div>
+      </div>
+
+      <div ref={attachBody} />
+
+      <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+        <div onClick={handleReload} title="Reload the current view" style={iconButtonStyle}>
+          ↻ Reload
+        </div>
+        <div
+          onClick={handleExpand}
+          title="Open a full-page report in your browser — stats, day-by-day trends, Jira completion, all properly readable (unlike this 300px widget)"
+          style={iconButtonStyle}
+        >
+          ⤢ Report
+        </div>
+        <div onClick={handleCopyStandup} title="Copy yesterday + today's standup to your clipboard, ready to paste" style={iconButtonStyle}>
+          📋 Standup
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 14 }}>
+        <input
+          type="text"
+          placeholder='log something, e.g. "mtg standup 15m"'
+          onKeyDown={handleLogKeyDown}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.15)",
+            background: "rgba(255,255,255,0.06)",
+            color: "rgba(255,255,255,0.92)",
+            fontSize: 12,
+            outline: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+};

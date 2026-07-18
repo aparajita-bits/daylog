@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.daylog.morningbrief</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{DL_PATH}}</string>
+		<string>morning-brief</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>900</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>{{DAYLOG_HOME}}/state/morningbrief.log</string>
+	<key>StandardErrorPath</key>
+	<string>{{DAYLOG_HOME}}/state/morningbrief.err.log</string>
+</dict>
+</plist>

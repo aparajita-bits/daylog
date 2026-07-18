@@ -1,0 +1,498 @@
+<title>daylog — where did my day actually go?</title>
+<style>
+  :root {
+    --ground: #ebe9e1;
+    --ground-2: #e2dfd4;
+    --panel: #f7f6f0;
+    --ink: #1b1e1a;
+    --muted: #6b6f66;
+    --line: rgba(27,30,26,0.13);
+    --line-strong: rgba(27,30,26,0.22);
+    --amber: #a8672a;
+    --amber-soft: rgba(168,103,42,0.14);
+    --teal: #3c7d70;
+    --teal-soft: rgba(60,125,112,0.14);
+    --shadow: 0 1px 0 rgba(27,30,26,0.05);
+
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, "Liberation Mono", monospace;
+    --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #14171a;
+      --ground-2: #191c1f;
+      --panel: #1c2023;
+      --ink: #eae7dd;
+      --muted: #8b9096;
+      --line: rgba(234,231,221,0.12);
+      --line-strong: rgba(234,231,221,0.22);
+      --amber: #e2a94a;
+      --amber-soft: rgba(226,169,74,0.16);
+      --teal: #6bbaa9;
+      --teal-soft: rgba(107,186,169,0.16);
+      --shadow: 0 1px 0 rgba(0,0,0,0.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #14171a;
+    --ground-2: #191c1f;
+    --panel: #1c2023;
+    --ink: #eae7dd;
+    --muted: #8b9096;
+    --line: rgba(234,231,221,0.12);
+    --line-strong: rgba(234,231,221,0.22);
+    --amber: #e2a94a;
+    --amber-soft: rgba(226,169,74,0.16);
+    --teal: #6bbaa9;
+    --teal-soft: rgba(107,186,169,0.16);
+    --shadow: 0 1px 0 rgba(0,0,0,0.3);
+  }
+  :root[data-theme="light"] {
+    --ground: #ebe9e1;
+    --ground-2: #e2dfd4;
+    --panel: #f7f6f0;
+    --ink: #1b1e1a;
+    --muted: #6b6f66;
+    --line: rgba(27,30,26,0.13);
+    --line-strong: rgba(27,30,26,0.22);
+    --amber: #a8672a;
+    --amber-soft: rgba(168,103,42,0.14);
+    --teal: #3c7d70;
+    --teal-soft: rgba(60,125,112,0.14);
+    --shadow: 0 1px 0 rgba(27,30,26,0.05);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.2s ease, color 0.2s ease;
+    overflow-x: hidden;
+  }
+
+  a { color: inherit; }
+  ::selection { background: var(--amber-soft); }
+
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  code, .mono { font-family: var(--font-mono); }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.5rem 0 0;
+  }
+  .brand {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    letter-spacing: 0.02em;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .brand .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); display: inline-block; }
+  .topbar nav { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted); }
+  .topbar nav a { text-decoration: none; border-bottom: 1px solid transparent; }
+  .topbar nav a:hover { border-color: var(--muted); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 4.5rem 0 3rem;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.1rem;
+  }
+  .eyebrow::before { content: "// "; color: var(--amber); }
+  h1 {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5vw, 3.4rem);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.3rem;
+    text-wrap: balance;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--amber);
+  }
+  .lede {
+    font-family: var(--font-serif);
+    font-size: 1.1875rem;
+    line-height: 1.65;
+    color: var(--ink);
+    max-width: 40rem;
+    margin: 0 0 2.1rem;
+  }
+  .lede b { font-weight: 600; }
+
+  .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 2.75rem; }
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    text-decoration: none;
+    padding: 0.7rem 1.15rem;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--ink); color: var(--ground); }
+  :root[data-theme="dark"] .btn-primary,
+  @media (prefers-color-scheme: dark) { .btn-primary { background: var(--amber); color: #14171a; } }
+  .btn-ghost { border-color: var(--line-strong); color: var(--ink); }
+  .btn-ghost:hover, .btn-primary:hover { opacity: 0.85; }
+  .btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  /* ---------- day strip (hero visual) ---------- */
+  .strip-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.35rem 1.5rem 1.15rem;
+    box-shadow: var(--shadow);
+  }
+  .strip-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted);
+    margin-bottom: 0.85rem;
+  }
+  .strip-head strong { color: var(--ink); font-weight: 600; }
+  .strip {
+    display: flex; height: 30px; border-radius: 3px; overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .strip span { height: 100%; }
+  .seg-coding { background: var(--amber); }
+  .seg-meeting { background: var(--teal); }
+  .seg-discussion { background: var(--amber-soft); border-right: 1px dashed var(--line-strong); }
+  .seg-gap {
+    background: repeating-linear-gradient(135deg, transparent, transparent 4px, var(--line-strong) 4px, var(--line-strong) 5px);
+  }
+  .seg-review { background: var(--teal-soft); }
+  .strip-ticks {
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 0.6875rem; color: var(--muted);
+    margin-top: 0.4rem;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 1rem;
+    font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted);
+    margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  /* ---------- section shell ---------- */
+  section { padding: 3.25rem 0; }
+  .rule { border: none; border-top: 1px solid var(--line); margin: 0; }
+  h2 {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 0 0 1.75rem;
+  }
+  h2 b { color: var(--ink); }
+
+  /* ---------- why (logbook excerpt) ---------- */
+  .note {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: 0 6px 6px 0;
+    padding: 1.6rem 1.85rem;
+  }
+  .note p { margin: 0 0 1rem; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .quote { color: var(--muted); font-style: italic; }
+
+  /* ---------- timeline / spine ---------- */
+  .spine { position: relative; margin-top: 0.5rem; }
+  .spine::before {
+    content: "";
+    position: absolute; left: 4.6rem; top: 0.4rem; bottom: 0.4rem;
+    width: 1px; background: var(--line-strong);
+  }
+  .entry {
+    position: relative;
+    display: grid;
+    grid-template-columns: 4.6rem 1fr;
+    gap: 1.35rem;
+    padding: 1.15rem 0;
+    opacity: 0; transform: translateY(10px);
+    animation: rise 0.5s ease forwards;
+  }
+  .entry:not(:last-child) { border-bottom: 1px solid var(--line); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .entry { animation: none; opacity: 1; transform: none; }
+  }
+  .entry .time {
+    font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted);
+    padding-top: 0.15rem; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .entry .dot {
+    position: absolute; left: calc(4.6rem - 4px); top: 1.45rem;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--ground); border: 2px solid var(--amber);
+  }
+  .entry .tag {
+    font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--amber);
+    margin-bottom: 0.3rem; display: block;
+  }
+  .entry h3 {
+    font-family: var(--font-serif); font-weight: 700; font-size: 1.0625rem;
+    margin: 0 0 0.35rem;
+  }
+  .entry p { margin: 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.6; }
+  .entry code {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 3px; padding: 0.05rem 0.35rem; font-size: 0.8125rem;
+  }
+
+  /* ---------- trust strip ---------- */
+  .trust {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 6px;
+    overflow: hidden;
+  }
+  .trust div { background: var(--panel); padding: 1.25rem 1.3rem; }
+  .trust .k { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+  .trust .v { font-family: var(--font-mono); font-size: 0.9375rem; font-weight: 600; }
+
+  /* ---------- install / footer ---------- */
+  .term {
+    background: var(--ink); color: var(--ground);
+    border-radius: 6px; padding: 1.3rem 1.5rem;
+    font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.9;
+    overflow-x: auto;
+  }
+  :root[data-theme="dark"] .term,
+  @media (prefers-color-scheme: dark) { .term { background: #0e1012; } }
+  .term .c1 { color: #9aa39c; }
+  :root[data-theme="dark"] .term .c1 { color: #6f7972; }
+  .term .c2 { color: var(--amber); }
+
+  footer { padding: 2.5rem 0 4rem; }
+  .foot-row {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    gap: 1rem; margin-top: 2rem;
+    font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted);
+  }
+  .foot-row a { text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+  .star-nudge { text-align: center; color: var(--muted); font-family: var(--font-serif); font-style: italic; font-size: 0.9375rem; margin-top: 2.75rem; }
+  .star-nudge b { color: var(--ink); font-style: normal; }
+
+  @media (max-width: 640px) {
+    .strip-ticks span:nth-child(2), .strip-ticks span:nth-child(4) { display: none; }
+    .entry { grid-template-columns: 3.6rem 1fr; gap: 0.9rem; }
+    .spine::before { left: 3.6rem; }
+    .entry .dot { left: calc(3.6rem - 4px); }
+    .trust { grid-template-columns: 1fr; }
+  }
+</style>
+
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>daylog</div>
+      <nav><a href="https://github.com/aparajita-bits/daylog">github.com/aparajita-bits/daylog</a></nav>
+    </div>
+
+    <section class="hero">
+      <p class="eyebrow">a local-first cli for engineers</p>
+      <h1>Where did my day<br>actually <em>go?</em></h1>
+      <p class="lede">
+        <b>daylog</b> auto-logs your Claude&nbsp;Code sessions, GitHub PRs,
+        Jira &amp; Confluence activity, and calendar meetings — then turns
+        the day into a standup you'd actually write yourself. No cloud,
+        no account, no telemetry: it's all plain JSONL in
+        <code>~/.daylog/</code>.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/aparajita-bits/daylog">View on GitHub ↗</a>
+        <a class="btn btn-ghost" href="https://github.com/aparajita-bits/daylog/stargazers">★ Star the repo</a>
+      </div>
+
+      <div class="strip-card">
+        <div class="strip-head">
+          <span>today · <strong>captured 7h 20m</strong> of 9h scheduled</span>
+          <span>09:00 → 18:00</span>
+        </div>
+        <div class="strip" role="img" aria-label="Timeline of a captured day: coding, a meeting, discussion, a gap, and a review">
+          <span class="seg-coding" style="width:35%"></span>
+          <span class="seg-meeting" style="width:13%"></span>
+          <span class="seg-discussion" style="width:18%"></span>
+          <span class="seg-gap" style="width:9%"></span>
+          <span class="seg-review" style="width:11%"></span>
+          <span class="seg-coding" style="width:14%"></span>
+        </div>
+        <div class="strip-ticks">
+          <span>09:00</span><span>11:15</span><span>13:30</span><span>15:45</span><span>18:00</span>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--amber)"></i>coding — auto-captured</span>
+          <span><i style="background:var(--teal)"></i>meeting — calendar sync</span>
+          <span><i style="background:var(--teal-soft)"></i>review — GitHub PRs</span>
+          <span><i style="background:var(--line-strong)"></i>gap — 40 min unaccounted</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section>
+      <h2>Why</h2>
+      <div class="note">
+        <p>It's 11:00&nbsp;am. Notification lights up: <span class="quote">"quick standup update for tomorrow?"</span></p>
+        <p>
+          A PR review, a flaky-build call that ran 40 minutes with no ticket
+          attached, a hallway conversation explaining the auth flow twice
+          because the first pass didn't land. Real work — none of it written
+          down anywhere. So the update becomes <span class="quote">"worked on
+          some stuff, a few meetings, reviewed a PR"</span> — true, and useless.
+        </p>
+        <p>
+          daylog doesn't ask you to track better — it stops losing the record
+          you're already generating. GitHub, Jira, Confluence, calendar, and
+          Claude&nbsp;Code pull in automatically; anything else is one line.
+          By evening, it's a standup ready to paste into Teams — not a guess
+          reconstructed at 11am, a record.
+        </p>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section>
+      <h2>A day, <b>logged</b></h2>
+      <div class="spine">
+
+        <div class="entry" style="animation-delay:0.02s">
+          <div class="time">09:14</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">auto-capture</span>
+            <h3>A Claude Code session starts logging itself</h3>
+            <p>Time accrues incrementally as you work — even a session left open for days gets split correctly across each day it was actually active.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.08s">
+          <div class="time">10:47</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">manual — one line</span>
+            <h3><code>dl log "explained the auth flow to a teammate" -d 20</code></h3>
+            <p>No integration list is ever complete. Fifteen minutes of hallway debugging gets the same one-line treatment as a two-hour coding session.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.14s">
+          <div class="time">11:02</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">github</span>
+            <h3>A reviewed PR lands in the timeline, unasked</h3>
+            <p>Opened, reviewed, and commented-on PRs are pulled automatically from an authenticated <code>gh</code> CLI — no MCP setup required.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.20s">
+          <div class="time">12:30</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">gap-fill</span>
+            <h3>"90 min unaccounted. Run <code>dl fill</code>."</h3>
+            <p>A quiet macOS nudge, not a nag — fill gaps one line at a time, or skip them. Anything under 15 minutes is ignored automatically.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.26s">
+          <div class="time">17:45</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">evening checkpoint</span>
+            <h3>Calendar, PRs, and Jira sweep themselves in</h3>
+            <p>One scheduled pass before the gap-fill reminder fires, so the record is already mostly built by the time you'd normally start reconstructing it.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.32s">
+          <div class="time">17:58</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">dl standup --ai</span>
+            <h3>A standup that reads like you wrote it</h3>
+            <p>No tool-internal labels, no time-of-day leaking through — related entries merge into one bullet about what actually got done. Copy, paste, done.</p>
+          </div>
+        </div>
+
+        <div class="entry" style="animation-delay:0.38s">
+          <div class="time">06:45</div>
+          <div class="dot"></div>
+          <div>
+            <span class="tag">morning brief</span>
+            <h3>Yesterday, waiting in Notes.app</h3>
+            <p>Delivered before you open your laptop — no command to remember, no copy-paste, nothing to forget on the way to your first meeting.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section>
+      <h2>Local, by design</h2>
+      <div class="trust">
+        <div>
+          <div class="k">Storage</div>
+          <div class="v">plain JSONL</div>
+        </div>
+        <div>
+          <div class="k">Cloud / account</div>
+          <div class="v">none</div>
+        </div>
+        <div>
+          <div class="k">License</div>
+          <div class="v">MIT</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding-top:0">
+      <div class="term">
+        <div><span class="c1">$</span> git clone <span class="c2">https://github.com/aparajita-bits/daylog</span></div>
+        <div><span class="c1">$</span> cd daylog &amp;&amp; ./install.sh</div>
+        <div><span class="c1">$</span> dl standup --ai</div>
+      </div>
+      <p class="star-nudge">If daylog saves you from an 11am standup scramble, <b>a ⭐ on GitHub</b> helps the next engineer find it too.</p>
+    </section>
+
+    <footer>
+      <hr class="rule">
+      <div class="foot-row">
+        <span>daylog — a local-first day tracker for engineers</span>
+        <a href="https://github.com/aparajita-bits/daylog">github.com/aparajita-bits/daylog</a>
+      </div>
+    </footer>
+  </div>
+</body>

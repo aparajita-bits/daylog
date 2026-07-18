@@ -23,17 +23,13 @@ plain JSONL files you own.
   <img src="docs/widget-week.png" alt="daylog desktop widget showing this week's captured hours and category breakdown, sitting alongside macOS's native Calendar, Clock, and Weather widgets" width="420">
 </p>
 
-```
- GitHub · Jira · Confluence · Calendar · Claude Code · Manual entries
-                              │
-                              ▼
-                          ┌───────┐
-                          │ daylog│
-                          └───┬───┘
-              ┌───────────────┼───────────────┬────────────────┐
-              ▼               ▼                ▼                ▼
-         AI Standup     Weekly Report     Desktop Widget    Morning Brief
-```
+<p align="center">
+  <b>GitHub · Jira · Confluence · Calendar · Claude Code · Manual entries</b>
+  <br>⬇
+  <br><b>daylog</b><br>
+  ⬇
+  <br><b>AI Standup · Weekly Report · Desktop Widget · Morning Brief</b>
+</p>
 
 | | |
 | --- | --- |

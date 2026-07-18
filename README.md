@@ -4,46 +4,35 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 ![macOS-first](https://img.shields.io/badge/platform-macOS--first-lightgrey.svg)
+[![Last commit](https://img.shields.io/github/last-commit/aparajita-bits/daylog)](https://github.com/aparajita-bits/daylog/commits/main)
+[![Stars](https://img.shields.io/github/stars/aparajita-bits/daylog?style=social)](https://github.com/aparajita-bits/daylog/stargazers)
 
-A local-first CLI that captures where an engineer's day actually goes —
-auto-logging Claude Code sessions, GitHub PRs, Jira/Confluence activity,
-calendar meetings, and manual entries — then turns all of it into
-AI-polished standups, a real weekly report, and a desktop widget you can
-actually read at a glance.
+**Where did my day actually go?** daylog auto-logs your Claude Code
+sessions, GitHub PRs, Jira/Confluence activity, and calendar meetings, then
+turns all of it into an AI-polished standup, a real weekly report, and a
+desktop widget — so the answer is always sitting there, instead of being
+reconstructed from memory at 11am.
 
 **No cloud. No account. No telemetry.** Everything lives in `~/.daylog/` as
 plain JSONL files you own.
 
+> If daylog saves you from an 11am standup scramble, a ⭐ helps other
+> engineers find it too.
+
 <p align="center">
-  <img src="docs/widget-week.png" alt="daylog desktop widget showing this week's captured hours and category breakdown, sitting alongside macOS's native Calendar, Clock, and Weather widgets" width="360">
+  <img src="docs/widget-week.png" alt="daylog desktop widget showing this week's captured hours and category breakdown, sitting alongside macOS's native Calendar, Clock, and Weather widgets" width="420">
 </p>
 
-## At a glance
-
-```mermaid
-graph LR
-    GH[GitHub PRs]
-    JC[Jira & Confluence]
-    CAL[Calendar]
-    CC[Claude Code]
-    ME[Manual entries]
-
-    GH --> DL((daylog))
-    JC --> DL
-    CAL --> DL
-    CC --> DL
-    ME --> DL
-
-    DL --> ST[AI Standup]
-    DL --> WK[Weekly Report]
-    DL --> WD[Desktop Widget]
-    DL --> MB[Morning Brief]
-
-    style DL fill:#7dd3fc,stroke:#333,color:#000
-    style ST fill:#fcd34d,color:#000
-    style WK fill:#c4b5fd,color:#000
-    style WD fill:#86efac,color:#000
-    style MB fill:#fca5a5,color:#000
+```
+ GitHub · Jira · Confluence · Calendar · Claude Code · Manual entries
+                              │
+                              ▼
+                          ┌───────┐
+                          │ daylog│
+                          └───┬───┘
+              ┌───────────────┼───────────────┬────────────────┐
+              ▼               ▼                ▼                ▼
+         AI Standup     Weekly Report     Desktop Widget    Morning Brief
 ```
 
 | | |
@@ -58,24 +47,53 @@ graph LR
 | 🗂️ **A real worklog over time** | Months of dated, structured entries — the data's there for a 6-month review-season summary, not just today's standup |
 | 🔒 **Local-first** | Plain JSONL in `~/.daylog/` — nothing optional turned on by default |
 
+## Install
+
+```bash
+git clone <this repo>
+cd daylog
+./install.sh
+```
+
+That's the whole setup — installs `dl` on PATH via `pipx`, then prompts for
+the optional pieces (Claude Code hooks, launchd reminders, morning-brief
+poller, desktop widget). Idempotent, so `git pull && ./install.sh` just
+upgrades in place. See [Install in detail](#install-in-detail) below for
+the manual path and what it deliberately leaves for you to do by hand.
+
+## Quickstart
+
+```bash
+dl log "discussed webhook retries with Priya" -d 30 -c discussion
+dl jira PROJ-1234 -d 90        # shortcut: coding time against a ticket
+dl day                          # today's timeline
+dl standup --ai                 # yesterday + today, AI-polished, copy-paste ready
+dl week                         # this week's analytics with bar charts
+dl view --week                  # a full HTML report: day-by-day trend, top tickets, Jira completion
+```
+
+<p align="center">
+  <img src="docs/report-week.png" alt="dl view --week HTML report showing stats, a day-by-day category trend, and where your time went" width="520">
+</p>
+
 ## Contents
 
 - [Why](#why)
 - [Platform support](#platform-support)
-- [Install](#install)
-- [Quickstart](#quickstart)
-- [Quick-entry interface](#quick-entry-interface-no-terminal-needed)
-- [Desktop widget](#desktop-widget)
-- [Auto-capture: Claude Code sessions](#auto-capture-claude-code-sessions)
-- [Gap-fill reminder](#gap-fill-reminder)
-- [Calendar sweep](#calendar-sweep)
-- [Evening checkpoint](#evening-checkpoint)
-- [Confluence activity](#confluence-activity)
-- [Morning brief](#morning-brief)
-- [AI-polished summaries](#ai-polished-summaries)
-- [Weekly analytics](#weekly-analytics)
-- [Full HTML report](#full-html-report)
-- [One-time backfill](#one-time-backfill)
+- [Install in detail](#install-in-detail)
+- [Feature deep-dives](#feature-deep-dives)
+  - [Quick-entry interface](#quick-entry-interface-no-terminal-needed)
+  - [Desktop widget](#desktop-widget)
+  - [Auto-capture: Claude Code sessions](#auto-capture-claude-code-sessions)
+  - [Gap-fill reminder](#gap-fill-reminder)
+  - [Calendar sweep](#calendar-sweep)
+  - [Evening checkpoint](#evening-checkpoint)
+  - [Confluence activity](#confluence-activity)
+  - [Morning brief](#morning-brief)
+  - [AI-polished summaries](#ai-polished-summaries)
+  - [Weekly analytics](#weekly-analytics)
+  - [Full HTML report](#full-html-report)
+  - [One-time backfill](#one-time-backfill)
 - [Configuration](#configuration)
 - [Repo layout](#repo-layout)
 - [Contributing](#contributing)
@@ -88,10 +106,9 @@ It's 11:00 am. Notification lights up: *"quick standup update for tomorrow?"*
 You stare at the day. A PR review, a flaky-build call that ran 40 minutes
 with no ticket attached, a hallway conversation explaining the auth flow
 twice because the first pass didn't land. Real work — none of it written
-down anywhere. Jira only knows ticket-shaped work; your calendar only
-knows scheduled meetings. The rest evaporates, so the update becomes
-*"worked on some stuff, a few meetings, reviewed a PR"* — true, and
-useless.
+down anywhere. Jira only knows ticket-shaped work; your calendar only knows
+scheduled meetings. The rest evaporates, so the update becomes *"worked on
+some stuff, a few meetings, reviewed a PR"* — true, and useless.
 
 daylog fixes this by not asking you to track better — it stops losing the
 record you're already generating. GitHub, Jira, Confluence, calendar, and
@@ -104,16 +121,10 @@ No integration list is ever complete — there's no connector for a hallway
 conversation, and there never will be. That's why manual logging isn't a
 fallback bolted on as an afterthought; it's the other half of the design.
 Fifteen minutes helping a teammate debug something gets the same one-line
-treatment as a two-hour coding session.
-
-And because it's all just dated, structured entries accumulating in
-`~/.daylog/`, daylog quietly doubles as a worklog. Six months in, you're
-not reconstructing your review-cycle summary from memory either — the
-data's already there, day by day.
-
-**Local-first, always.** Everything lives in `~/.daylog/` as plain JSONL —
-no cloud, no account, no telemetry. Every integration above is optional
-and off unless you turn it on in `config.yaml`.
+treatment as a two-hour coding session. And because it's all just dated,
+structured entries accumulating in `~/.daylog/`, daylog quietly doubles as
+a worklog — six months in, the data for your review-cycle summary is
+already there, day by day, not reconstructed from memory.
 
 ## Platform support
 
@@ -139,31 +150,23 @@ If you're on Linux, the CLI itself and every MCP/CLI-based integration
 brief) work as-is — only the JXA/Calendar.app/Notes.app/Übersicht/launchd
 pieces are macOS-specific, and each has a documented workaround above.
 
-## Install
+## Install in detail
 
-```bash
-git clone <this repo>
-cd daylog
-./install.sh
-```
-
-That's the whole setup: it installs `dl` permanently on PATH via `pipx`
-(no venv to activate, works in every shell), then asks whether to install the
-Claude Code auto-capture hooks, the launchd reminders, the morning-brief
-poller, and the desktop widget (all optional, all safe to install later —
-see below). It's idempotent, so re-running it after a `git pull` just
-upgrades in place; pass `--yes` to accept the recommended default for every
+Full `install.sh` behavior: it installs `dl` permanently on PATH via `pipx`
+(no venv to activate, works in every shell), then asks whether to install
+the Claude Code auto-capture hooks, the launchd reminders, the
+morning-brief poller, and the desktop widget (all optional, all safe to
+install later). Pass `--yes` to accept the recommended default for every
 prompt (except the unattended-MCP settings, which are always asked
 explicitly since they're a real tradeoff, not a convenience default).
 
-Two things it deliberately leaves to you, since they need a human in the loop:
-run `dl calendar-sync` once yourself (macOS will prompt for Calendar access),
-and set up the [Shortcuts.app quick-entry flow](shortcuts/README.md) (~3 min,
-GUI-only, can't be scripted).
+Two things it deliberately leaves to you, since they need a human in the
+loop: run `dl calendar-sync` once yourself (macOS will prompt for Calendar
+access), and set up the [Shortcuts.app quick-entry flow](shortcuts/README.md)
+(~3 min, GUI-only, can't be scripted).
 
-Prefer to do it by hand, or don't have `pipx`?
-
-Manual install
+<details>
+<summary>Prefer to do it by hand, or don't have <code>pipx</code>?</summary>
 
 ```bash
 python3 -m venv .venv
@@ -175,21 +178,17 @@ dl day   # should print "No entries for <today>" — you're set up
 Then run `python3 hooks/install_hooks.py` and
 `python3 reminders/install_reminders.py --load` yourself if you want those.
 
-## Quickstart
+</details>
 
-```bash
-dl log "discussed webhook retries with Priya" -d 30 -c discussion
-dl jira PROJ-1234 -d 90                 # shortcut: coding time against a ticket
-dl day                                   # today's timeline
-dl standup --ai                          # yesterday + today, AI-polished, copy-paste ready (falls back to a template)
-dl week                                  # this week's analytics with bar charts
-dl view --week                           # a full HTML report: day-by-day trend, top tickets, Jira completion
-```
+## Feature deep-dives
 
-## Quick-entry interface (no terminal needed)
+<details>
+<summary><strong>Quick-entry interface (no terminal needed)</strong></summary>
+
+### Quick-entry interface (no terminal needed)
 
 Typing `dl log "..." -d 30 -c meeting` in a terminal is still friction. See
-`[shortcuts/README.md](shortcuts/README.md)` for a ~3-minute one-time setup
+[shortcuts/README.md](shortcuts/README.md) for a ~3-minute one-time setup
 that wires `dl quicklog` into **macOS Shortcuts**, so logging becomes:
 `⌘Space` → type the shortcut name → type one line → Enter. Optionally bind it
 to a global keyboard shortcut so you don't even need Spotlight.
@@ -200,7 +199,12 @@ duration, category, and Jira key so a single text field is enough. An
 explicit duration token in the text (`45m`, `1h30m`) always wins over
 whatever default would otherwise apply.
 
-## Desktop widget
+</details>
+
+<details>
+<summary><strong>Desktop widget</strong></summary>
+
+### Desktop widget
 
 `./install.sh` prompts to set this up too. A floating desktop widget (via
 [Übersicht](https://tracesof.net/uebersicht/)) that sits alongside macOS's
@@ -230,7 +234,12 @@ native Calendar/Weather widgets instead of looking like a foreign object:
 See [widget/README.md](widget/README.md) for the manual setup path,
 customizing colors/position, and troubleshooting.
 
-## Auto-capture: Claude Code sessions
+</details>
+
+<details>
+<summary><strong>Auto-capture: Claude Code sessions</strong></summary>
+
+### Auto-capture: Claude Code sessions
 
 ```bash
 python3 hooks/install_hooks.py --dry-run   # see what it would change first
@@ -258,7 +267,12 @@ The hook fails silently on any error — problems go to
 
 To remove: `python3 hooks/install_hooks.py --uninstall`.
 
-## Gap-fill reminder
+</details>
+
+<details>
+<summary><strong>Gap-fill reminder</strong></summary>
+
+### Gap-fill reminder
 
 ```bash
 python3 reminders/install_reminders.py --load
@@ -267,11 +281,12 @@ python3 reminders/install_reminders.py --load
 Installs the `launchd` agents (writes them either way; `--load` also starts
 them running):
 
-- **17:45** — the evening checkpoint (`dl checkpoint`): calendar sweep + GitHub
-PRs (authored/reviewed/commented) + (optionally) Jira, then regenerates the AI summary — see
-[Evening checkpoint](#evening-checkpoint) below
-- **18:00** — gap-fill reminder (`dl fill --notify`), a macOS notification like
-*"3.5 hrs captured, ~4 hrs unaccounted. Run `dl fill` to fill gaps."*
+- **17:45** — the evening checkpoint (`dl checkpoint`): calendar sweep +
+  GitHub PRs (authored/reviewed/commented) + (optionally) Jira, then
+  regenerates the AI summary — see [Evening checkpoint](#evening-checkpoint)
+  below
+- **18:00** — gap-fill reminder (`dl fill --notify`), a macOS notification
+  like *"3.5 hrs captured, ~4 hrs unaccounted. Run `dl fill` to fill gaps."*
 - **morning brief** (opt-in, `--morning-brief`) — polls every ~15 min, see
   [Morning brief](#morning-brief) below
 
@@ -285,10 +300,15 @@ and fill gaps one line at a time:
 ```
 
 Gaps under 15 minutes are auto-ignored. On Linux, see
-`[reminders/daylog-cron.md](reminders/daylog-cron.md)` for the cron
+[reminders/daylog-cron.md](reminders/daylog-cron.md) for the cron
 equivalent.
 
-## Calendar sweep
+</details>
+
+<details>
+<summary><strong>Calendar sweep</strong></summary>
+
+### Calendar sweep
 
 `dl fill` always runs a quick calendar sync first if the calendar part of
 today's 17:45 checkpoint hasn't happened yet (laptop asleep, etc — this lazy
@@ -330,7 +350,12 @@ For historical data, `/daylog-backfill-outlook` is the range counterpart —
 see [One-time backfill](#one-time-backfill). `icalBuddy` remains a
 documented-but-unwired third option if neither of the above fits your setup.
 
-## Evening checkpoint
+</details>
+
+<details>
+<summary><strong>Evening checkpoint</strong></summary>
+
+### Evening checkpoint
 
 `dl checkpoint` runs at 17:45 (the same launchd slot as the calendar sweep —
 it's a superset of it) and pulls three things into the log before the 18:00
@@ -352,7 +377,7 @@ dl checkpoint            # calendar + GitHub PRs (authored/reviewed/commented) +
    `comment_duration_min`) and flagged `~` needs-review, same as backfilled
    Jira entries — fix with `dl edit`.
 3. **Jira ticket activity** — off by default. This one needs the Atlassian
-  MCP connector, and there's no one around at 17:45 to approve an MCP tool
+   MCP connector, and there's no one around at 17:45 to approve an MCP tool
    prompt, so by default it safely does nothing (verified: it detects the
    missing permission and stops, rather than hanging or guessing at data —
    see `~/.daylog/checkpoint.log`). To actually make it run unattended, set
@@ -367,7 +392,12 @@ dl checkpoint            # calendar + GitHub PRs (authored/reviewed/commented) +
 After all three, it regenerates today's AI summary (`dl summary --ai`) so
 it reflects the newly-pulled data.
 
-## Confluence activity
+</details>
+
+<details>
+<summary><strong>Confluence activity</strong></summary>
+
+### Confluence activity
 
 Not part of the automated checkpoint (same reasoning as Jira's off-by-default
 stance — no one to approve MCP prompts unattended, and this one's less
@@ -383,7 +413,12 @@ MCP connector, into `dl import-events --source confluence`. Entries default
 to 25 minutes (edited) / 15 minutes (commented) and show a `~` marker in
 `dl day`, same as backfilled Jira entries — fix with `dl edit`.
 
-## Morning brief
+</details>
+
+<details>
+<summary><strong>Morning brief</strong></summary>
+
+### Morning brief
 
 Off by default; `install.sh` offers to set it up. Delivers yesterday's
 AI-polished standup (same content as `dl standup --ai`, just yesterday only)
@@ -429,7 +464,12 @@ Claude pattern as the Jira/Outlook checkpoints, so it needs
 same unattended-MCP-tool-use tradeoff as `checkpoint.jira_skip_permissions`,
 off by default.
 
-## AI-polished summaries
+</details>
+
+<details>
+<summary><strong>AI-polished summaries</strong></summary>
+
+### AI-polished summaries
 
 ```bash
 dl summary            # template version, always available
@@ -459,7 +499,12 @@ meeting load, focus blocks — turned out more useful than the narrative, so
 `dl view --week` doesn't call this automatically anymore; run `dl review
 --ai` directly if you still want the prose version.
 
-## Weekly analytics
+</details>
+
+<details>
+<summary><strong>Weekly analytics</strong></summary>
+
+### Weekly analytics
 
 ```bash
 dl week            # this week
@@ -481,7 +526,12 @@ covers Jira-linked work with a captured transition; daylog tracks time
 spent, not task status in general, so untagged/non-Jira entries can't be
 classified as done or not.
 
-## Full HTML report
+</details>
+
+<details>
+<summary><strong>Full HTML report</strong></summary>
+
+### Full HTML report
 
 ```bash
 dl view            # today: stats + AI insights
@@ -494,10 +544,6 @@ dl view --no-open   # write ~/.daylog/state/view.html without opening a browser
 A properly-typeset page instead of squinting at terminal/widget output —
 built for the desktop widget's Report button, but works standalone too.
 
-<p align="center">
-  <img src="docs/report-week.png" alt="dl view --week HTML report showing stats, a day-by-day category trend, and where your time went" width="520">
-</p>
-
 The **day** view includes an AI Insights section (reuses the same prompt as
 `dl standup --ai`, so it reads like a real recap, not a report). The **week**
 view deliberately has no AI section — the pattern-spotting prose ("meeting-
@@ -505,7 +551,12 @@ heavy vs. deep-work days") wasn't useful in practice, and the sections above
 already cover the same ground with real numbers instead of narrative, and
 the page opens near-instantly since it skips the AI call entirely.
 
-## One-time backfill
+</details>
+
+<details>
+<summary><strong>One-time backfill</strong></summary>
+
+### One-time backfill
 
 New to daylog? Recover the last week so analytics have real data from day one:
 
@@ -553,10 +604,15 @@ calendar_sync:
 /daylog-backfill-outlook
 ```
 
+</details>
+
 ## Configuration
 
 Everything tunable lives in `~/.daylog/config.yaml`, created with defaults on
-first run. Open it with `dl config`. Key sections:
+first run. Open it with `dl config`.
+
+<details>
+<summary><strong>Full configuration reference</strong></summary>
 
 | Key                                           | Default                                                                   | What it does                                                                                                                                                        |
 | --------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -597,7 +653,12 @@ first run. Open it with `dl config`. Key sections:
 No personal data is hardcoded anywhere in the source — everything above is
 config-driven, which is also why this is safe to keep in a public repo.
 
+</details>
+
 ## Repo layout
+
+<details>
+<summary><strong>Full tree</strong></summary>
 
 ```
 daylog/
@@ -626,6 +687,8 @@ daylog/
 └── tests/                     # fixture-driven tests for every module above
 ```
 
+</details>
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: it's a Python CLI,
@@ -645,3 +708,15 @@ original plan — see [Quick-entry interface](#quick-entry-interface-no-terminal
 and [Desktop widget](#desktop-widget) above for why.) See the build plan's
 "Later / Ideas" section for what's still deliberately deferred
 (idle-detection daemon, energy tagging, team mode, etc).
+
+## Star History
+
+<p align="center">
+  <a href="https://star-history.com/#aparajita-bits/daylog&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=aparajita-bits/daylog&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=aparajita-bits/daylog&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=aparajita-bits/daylog&type=Date" width="600">
+    </picture>
+  </a>
+</p>

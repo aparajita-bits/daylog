@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 340" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace">
+  <title>How daylog works</title>
+  <desc>GitHub, Jira &amp; Confluence, Calendar, Claude Code, and manual entries all flow into daylog, which produces an AI standup, a weekly report, a desktop widget, and a morning brief.</desc>
+  <defs>
+    <style>
+      :root {
+        --ink: #1b1e1a;
+        --muted: #6b6f66;
+        --panel: #f7f6f0;
+        --line: #d9d6ca;
+        --amber: #a8672a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #eae7dd;
+          --muted: #9aa19a;
+          --panel: #1c2023;
+          --line: #33383b;
+          --amber: #e2a94a;
+        }
+      }
+      .pill { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+      .pill-in-label { fill: var(--ink); font-size: 13px; font-weight: 600; }
+      .pill-out { stroke-width: 2; stroke: var(--amber); }
+      .pill-out-label { fill: var(--amber); font-size: 13px; font-weight: 700; }
+      .link { fill: none; stroke: var(--line); stroke-width: 1.5; }
+      .node { fill: var(--panel); stroke: var(--amber); stroke-width: 1.75; }
+      .node-label { fill: var(--ink); font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+      .node-dot { fill: var(--amber); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)" />
+    </marker>
+  </defs>
+
+  <!-- connectors: inputs -> daylog -->
+  <path class="link" marker-end="url(#arrow)" d="M216,70  C300,70  300,170 372,170" />
+  <path class="link" marker-end="url(#arrow)" d="M216,120 C300,120 300,170 372,170" />
+  <path class="link" marker-end="url(#arrow)" d="M216,170 C300,170 300,170 372,170" />
+  <path class="link" marker-end="url(#arrow)" d="M216,220 C300,220 300,170 372,170" />
+  <path class="link" marker-end="url(#arrow)" d="M216,270 C300,270 300,170 372,170" />
+
+  <!-- connectors: daylog -> outputs -->
+  <path class="link" marker-end="url(#arrow)" d="M548,170 C620,170 620,83  704,83" />
+  <path class="link" marker-end="url(#arrow)" d="M548,170 C620,170 620,141 704,141" />
+  <path class="link" marker-end="url(#arrow)" d="M548,170 C620,170 620,199 704,199" />
+  <path class="link" marker-end="url(#arrow)" d="M548,170 C620,170 620,257 704,257" />
+
+  <!-- input pills -->
+  <g>
+    <rect class="pill" x="16" y="52" width="200" height="36" rx="6" />
+    <text class="pill-in-label" x="116" y="75" text-anchor="middle">GitHub PRs</text>
+
+    <rect class="pill" x="16" y="102" width="200" height="36" rx="6" />
+    <text class="pill-in-label" x="116" y="125" text-anchor="middle">Jira &amp; Confluence</text>
+
+    <rect class="pill" x="16" y="152" width="200" height="36" rx="6" />
+    <text class="pill-in-label" x="116" y="175" text-anchor="middle">Calendar</text>
+
+    <rect class="pill" x="16" y="202" width="200" height="36" rx="6" />
+    <text class="pill-in-label" x="116" y="225" text-anchor="middle">Claude Code</text>
+
+    <rect class="pill" x="16" y="252" width="200" height="36" rx="6" />
+    <text class="pill-in-label" x="116" y="275" text-anchor="middle">Manual entries</text>
+  </g>
+
+  <!-- center node -->
+  <g>
+    <rect class="node" x="372" y="135" width="176" height="70" rx="8" />
+    <circle class="node-dot" cx="418" cy="170" r="4" />
+    <text class="node-label" x="466" y="177" text-anchor="middle">daylog</text>
+  </g>
+
+  <!-- output pills -->
+  <g>
+    <rect class="pill pill-out" x="704" y="63" width="200" height="40" rx="6" />
+    <text class="pill-out-label" x="804" y="88" text-anchor="middle">AI Standup</text>
+
+    <rect class="pill pill-out" x="704" y="121" width="200" height="40" rx="6" />
+    <text class="pill-out-label" x="804" y="146" text-anchor="middle">Weekly Report</text>
+
+    <rect class="pill pill-out" x="704" y="179" width="200" height="40" rx="6" />
+    <text class="pill-out-label" x="804" y="204" text-anchor="middle">Desktop Widget</text>
+
+    <rect class="pill pill-out" x="704" y="237" width="200" height="40" rx="6" />
+    <text class="pill-out-label" x="804" y="262" text-anchor="middle">Morning Brief</text>
+  </g>
+</svg>

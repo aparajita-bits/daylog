@@ -25,11 +25,7 @@ plain JSONL files you own.
 </p>
 
 <p align="center">
-  <b>GitHub · Jira · Confluence · Calendar · Claude Code · Manual entries</b>
-  <br>⬇
-  <br><b>daylog</b><br>
-  ⬇
-  <br><b>AI Standup · Weekly Report · Desktop Widget · Morning Brief</b>
+  <img src="docs/at-a-glance.svg" alt="GitHub PRs, Jira &amp; Confluence, Calendar, Claude Code, and manual entries all flow into daylog, which produces an AI standup, a weekly report, a desktop widget, and a morning brief" width="720">
 </p>
 
 | | |

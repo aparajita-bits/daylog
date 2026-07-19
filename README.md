@@ -57,7 +57,7 @@ the manual path and what it deliberately leaves for you to do by hand.
 ## Quickstart
 
 ```bash
-dl log "discussed webhook retries with Priya" -d 30 -c discussion
+dl log "paired with a teammate on the AI agent for log investigation" -d 30 -c discussion
 dl jira PROJ-1234 -d 90        # shortcut: coding time against a ticket
 dl day                          # today's timeline
 dl standup --ai                 # yesterday + today, AI-polished, copy-paste ready

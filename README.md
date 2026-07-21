@@ -329,6 +329,14 @@ only sees events that are actually *in* Calendar.app — if your Outlook
 meetings aren't routed there (no Exchange/Internet account added in System
 Settings → Internet Accounts), they won't show up here at all.
 
+Calendar.app's AppleScript `.whose()` date-range query is a linear scan, not
+an indexed lookup — on calendars with a lot of (recurring) events it can take
+well over a minute, and varies run to run. If `dl calendar-sync` reports `0
+new entries` even though events exist for the day, raise
+`calendar_sync.eventkit_timeout_sec` (default `120`) in `config.yaml` — the
+subprocess was silently timing out before Calendar.app answered, which looks
+identical to "no events found."
+
 **Outlook/Microsoft 365 backend** (`calendar_sync.backend: "outlook"`) pulls
 directly from Outlook via the Microsoft 365 MCP connector instead, for when
 your meetings live there and aren't synced into Calendar.app. Unlike the
@@ -531,6 +539,7 @@ dl view            # today: stats + AI insights
 dl view --week      # this week: stats, day-by-day trend, where your time went
                      # (top tickets/projects), meeting load by weekday,
                      # longest focus block per day, and Jira completion
+dl view --week --prev   # same report, but for last week instead of this week
 dl view --no-open   # write ~/.daylog/state/view.html without opening a browser
 ```
 
@@ -622,6 +631,7 @@ first run. Open it with `dl config`.
 | `calendar_sync.min_duration_min`              | 10                                                                        | Events shorter than this are skipped                                                                                                                                |
 | `calendar_sync.ignore_titles`                 | focus, lunch, blocker, hold                                               | Event titles to skip                                                                                                                                                |
 | `calendar_sync.dedup_tolerance_min`           | 10                                                                        | Overlap tolerance for manual/calendar dedup                                                                                                                         |
+| `calendar_sync.eventkit_timeout_sec`          | 120                                                                       | Timeout for the `eventkit` backend's `osascript` call. Calendar.app's `.whose()` date-range query is a linear scan and can take well over a minute on some calendars — raise this if syncs report 0 entries despite real events |
 | `gapfill.min_gap_min`                         | 15                                                                        | Gaps shorter than this are auto-ignored                                                                                                                             |
 | `gapfill.excluded_categories`                 | lunch, break                                                              | Extra categories accepted as gap-fill shorthand                                                                                                                     |
 | `working_hours`                               | 09:00–18:00                                                               | Used for gap computation and capture rate                                                                                                                           |

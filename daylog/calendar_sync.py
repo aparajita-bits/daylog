@@ -41,10 +41,15 @@ def _save_absorbed(day: date, uids: set[str]) -> None:
     _absorbed_path(day).write_text(json.dumps(sorted(uids)))
 
 
-def fetch_events_eventkit(day: date) -> list[dict]:
+def fetch_events_eventkit(day: date, timeout_sec: int = 120) -> list[dict]:
     """Best-effort: query macOS Calendar.app via JXA. Returns [] on any failure
     (no Calendar access, not on macOS, permission denied, timeout, etc) rather
     than raising — calendar sync is optional and must never block `dl fill`.
+
+    `timeout_sec` defaults generously: Calendar.app's `.whose()` date-range
+    query is a linear scan, not indexed, and has been observed taking well
+    over 30s on calendars with many (recurring) events -- a short timeout
+    here just means every sync silently finds nothing.
     """
     if not shutil.which("osascript") or not JXA_SCRIPT.exists():
         return []
@@ -53,7 +58,7 @@ def fetch_events_eventkit(day: date) -> list[dict]:
             ["osascript", "-l", "JavaScript", str(JXA_SCRIPT), day.isoformat()],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=timeout_sec,
         )
     except (subprocess.TimeoutExpired, OSError):
         return []
@@ -153,7 +158,7 @@ def calendar_sync(day: date, cfg: dict) -> list[Entry]:
         # checkpoint.py::run_outlook_checkpoint) into `dl import-events`
         # instead, which lands here through sync_day() the same way.
         return []
-    raw_events = fetch_events_eventkit(day)
+    raw_events = fetch_events_eventkit(day, timeout_sec=cfg["calendar_sync"].get("eventkit_timeout_sec", 120))
     return sync_day(day, raw_events, cfg)
 
 
@@ -166,7 +171,7 @@ def calendar_sync_range(
         if not cfg["calendar_sync"]["enabled"] or cfg["calendar_sync"].get("backend", "eventkit") != "eventkit":
             result[d] = []
         else:
-            raw_events = fetch_events_eventkit(d)
+            raw_events = fetch_events_eventkit(d, timeout_sec=cfg["calendar_sync"].get("eventkit_timeout_sec", 120))
             result[d] = sync_day(d, raw_events, cfg, source_label=source_label)
         d += timedelta(days=1)
     return result

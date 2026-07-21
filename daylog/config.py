@@ -48,6 +48,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "min_duration_min": 10,
         "ignore_titles": ["focus", "lunch", "blocker", "hold"],
         "dedup_tolerance_min": 10,
+        # Calendar.app's AppleScript `.whose()` date-range query is a linear
+        # scan, not an indexed lookup -- on calendars with many (recurring)
+        # events this has been observed taking 60-100+ seconds, well past a
+        # naive short timeout, causing eventkit syncs to silently return no
+        # events every time.
+        "eventkit_timeout_sec": 120,
     },
     "gapfill": {
         "min_gap_min": 15,

@@ -329,7 +329,7 @@ def _render_page(
 """
 
 
-def run_view(cfg: dict, week: bool = False, open_browser: bool = True) -> Path:
+def run_view(cfg: dict, week: bool = False, prev: bool = False, open_browser: bool = True) -> Path:
     ensure_dirs()
     today = date.today()
 
@@ -343,7 +343,7 @@ def run_view(cfg: dict, week: bool = False, open_browser: bool = True) -> Path:
     if week:
         from daylog.analytics import WEEKDAYS, compute_stats, load_week, week_bounds
 
-        monday, sunday = week_bounds(today, 0)
+        monday, sunday = week_bounds(today, -1 if prev else 0)
         week_entries = load_week(monday)
         stats = compute_stats(week_entries, cfg)
         title = f"Week of {monday.isoformat()}"

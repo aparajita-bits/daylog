@@ -472,6 +472,7 @@ def review(
 @app.command()
 def view(
     week: bool = typer.Option(False, "--week", help="This week instead of today"),
+    prev: bool = typer.Option(False, "--prev", help="With --week, show last week instead of this week"),
     no_open: bool = typer.Option(False, "--no-open", help="Write the HTML file without opening a browser"),
 ):
     """Nicely-formatted HTML report opened in your default browser: category
@@ -483,11 +484,11 @@ def view(
     useful and the sections above already cover the same ground with real
     numbers. Built for the widget's expand button — cramming multi-
     paragraph text into a 300px-wide widget reads badly — but fine to run
-    by hand any time."""
+    by hand any time. Pass --prev alongside --week for last week's report."""
     from daylog.view import run_view
 
     cfg = load_config()
-    path = run_view(cfg, week=week, open_browser=not no_open)
+    path = run_view(cfg, week=week, prev=prev, open_browser=not no_open)
     console.print(f"[green]view[/green] written to {path}")
 
 

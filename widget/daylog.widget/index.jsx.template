@@ -189,10 +189,12 @@ const attachDrag = (headerNode) => {
 // aren't rendered in-widget at all (300px is too small to read prose
 // comfortably) — see the Expand button, which opens `dl view` instead.
 const widgetCache = {
-  period: "day", // "day" | "week"
+  period: "day", // "day" | "week" | "notes"
   dayData: null, // latest parsed `dl day --json` (refreshed every 5 min via command)
   weekData: null, // cached `dl week --json`, fetched on demand
+  notesData: null, // cached `dl notes --json`, fetched on demand (same shape as weekData)
   dayLabel: "", // e.g. "Saturday, July 18" -- recomputed each render() from dayData.date
+  inputMode: "log", // "log" | "note" -- toggled by the small icon next to the log input
 };
 
 // React only (re-)invokes a ref callback when the underlying DOM node's
@@ -201,14 +203,27 @@ const widgetCache = {
 // click handlers instead of relying on a re-render to reflect state.
 let bodyDomNode = null;
 let headerLabelDomNode = null;
-const tabNodes = { day: null, week: null };
+let inputDomNode = null;
+let noteModeIconDomNode = null;
+let actionsRowDomNode = null;
+const tabNodes = { day: null, week: null, notes: null };
+
+// Reload/Report/Standup don't apply to the Notes tab (there's nothing to
+// reload beyond the on-demand fetch already covering it, no report/standup
+// concept for notes) -- hidden there the same way everything else in this
+// file is kept in sync: direct style mutation, since a tab click doesn't
+// trigger a React re-render.
+const syncActionsRow = () => {
+  if (!actionsRowDomNode) return;
+  actionsRowDomNode.style.display = widgetCache.period === "notes" ? "none" : "flex";
+};
 
 const tabStyleFor = (active) => ({
   background: active ? "rgba(255,255,255,0.16)" : "transparent",
   color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
 });
 
-// Keeps the Day/Week tab pills' highlighting in sync with widgetCache —
+// Keeps the Day/Week/Notes tab pills' highlighting in sync with widgetCache —
 // must be called any time widgetCache.period changes, since nothing else
 // will repaint them (see the big comment at the top of this file).
 const syncTabStyles = () => {
@@ -220,6 +235,7 @@ const syncTabStyles = () => {
   };
   apply(tabNodes.day, widgetCache.period === "day");
   apply(tabNodes.week, widgetCache.period === "week");
+  apply(tabNodes.notes, widgetCache.period === "notes");
 };
 
 // Same fix, same reason as syncTabStyles: the header label ("Saturday, July
@@ -229,7 +245,27 @@ const syncTabStyles = () => {
 // so it went stale exactly like the tab pills used to.
 const syncHeaderLabel = () => {
   if (!headerLabelDomNode) return;
-  headerLabelDomNode.textContent = widgetCache.period === "day" ? widgetCache.dayLabel : "This week";
+  headerLabelDomNode.textContent =
+    widgetCache.period === "day" ? widgetCache.dayLabel : widgetCache.period === "week" ? "This week" : "Notes";
+};
+
+// Keeps the note-mode toggle icon's own appearance in sync with
+// widgetCache.inputMode -- like the tab pills, nothing else will repaint it
+// on click, and a placeholder-text-only signal is too easy to miss.
+const syncInputMode = () => {
+  const noteMode = widgetCache.inputMode === "note";
+  if (noteModeIconDomNode) {
+    // Swap the glyph itself, not just opacity/background -- a subtle tint
+    // alone was too easy to miss (confirmed: led to notes being typed while
+    // still in log mode, landing as real time entries instead).
+    noteModeIconDomNode.textContent = noteMode ? "📝" : "⏱️";
+    noteModeIconDomNode.style.opacity = noteMode ? "1" : "0.6";
+    noteModeIconDomNode.style.background = noteMode ? "rgba(255,255,255,0.16)" : "transparent";
+    noteModeIconDomNode.style.borderColor = noteMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.12)";
+  }
+  if (inputDomNode) {
+    inputDomNode.placeholder = noteMode ? "add a note/action item…" : 'log something, e.g. "mtg standup 15m"';
+  }
 };
 
 const buildStatsBarsHTML = (categoryMin) => {
@@ -272,6 +308,36 @@ const buildGapNudgeHTML = () => {
   </div>`;
 };
 
+// Notes tab body: leads with a big-number count (same visual grammar as
+// buildTotalHTML for Day/Week — a number + label anchor before the detail
+// list), then a plain string-template list (innerHTML, same as every other
+// body renderer here) with a small checkbox per row carrying data-note-id.
+// Deliberately a plain bordered <div>, not a "☐" text glyph -- that
+// character's line-box metrics vary wildly across system fonts and were
+// blowing up each row's height, leaving a large dead gap below the list.
+// Clicks are wired up separately in renderBody() after innerHTML is set,
+// since innerHTML replacement doesn't preserve React event handlers.
+const buildNotesListHTML = (notesList) => {
+  const count = (notesList || []).length;
+  const header = `
+    <div style="font-size:40px;font-weight:600;margin-top:6px;line-height:1;">${count}</div>
+    <div style="font-size:13px;opacity:0.6;margin-top:2px;">${count === 1 ? "pending note" : "pending notes"}</div>
+  `;
+  if (!count) {
+    return header + `<div style="font-size:12px;opacity:0.5;margin-top:16px;">nothing pending — add one below</div>`;
+  }
+  const rows = notesList
+    .map(
+      (n) => `
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;">
+        <div class="daylog-note-done" data-note-id="${escapeHtml(n.id)}" title="mark done" style="flex-shrink:0;width:12px;height:12px;margin-top:2px;border-radius:3px;border:1px solid rgba(255,255,255,0.4);cursor:pointer;"></div>
+        <div style="flex:1;font-size:12px;line-height:1.4;">${escapeHtml(n.text)}</div>
+      </div>`
+    )
+    .join("");
+  return header + `<div style="margin-top:14px;">${rows}</div>`;
+};
+
 const renderBody = (bodyNode) => {
   if (!bodyNode) return;
 
@@ -281,7 +347,7 @@ const renderBody = (bodyNode) => {
       buildTotalHTML(data.total_captured_min || 0, "captured today") +
       buildStatsBarsHTML(data.category_min) +
       buildGapNudgeHTML();
-  } else {
+  } else if (widgetCache.period === "week") {
     const data = widgetCache.weekData;
     if (!data) {
       bodyNode.innerHTML = `<div class="daylog-pulse" style="font-size:12px;opacity:0.6;margin-top:16px;">loading…</div>`;
@@ -289,6 +355,16 @@ const renderBody = (bodyNode) => {
       bodyNode.innerHTML =
         buildTotalHTML(data.total_captured_min || 0, `captured this week (${Math.round(data.capture_rate || 0)}% of scheduled)`) +
         buildStatsBarsHTML(data.category_min);
+    }
+  } else {
+    const data = widgetCache.notesData;
+    if (!data) {
+      bodyNode.innerHTML = `<div class="daylog-pulse" style="font-size:12px;opacity:0.6;margin-top:16px;">loading…</div>`;
+    } else {
+      bodyNode.innerHTML = buildNotesListHTML(data.notes);
+      bodyNode.querySelectorAll(".daylog-note-done").forEach((el) => {
+        el.addEventListener("click", () => handleNoteDone(el.dataset.noteId, bodyNode));
+      });
     }
   }
 };
@@ -312,6 +388,42 @@ const fetchWeekStats = (bodyNode) => {
 const fetchWeekStatsIfNeeded = (bodyNode) => {
   if (widgetCache.weekData) return;
   fetchWeekStats(bodyNode);
+};
+
+const fetchNotes = (bodyNode) => {
+  run(`${DL_PATH} notes --json 2>/dev/null`)
+    .then((out) => {
+      try {
+        widgetCache.notesData = JSON.parse(out);
+      } catch (e) {
+        widgetCache.notesData = { notes: [] };
+      }
+      renderBody(bodyNode);
+    })
+    .catch(() => {
+      widgetCache.notesData = { notes: [] };
+      renderBody(bodyNode);
+    });
+};
+
+const fetchNotesIfNeeded = (bodyNode) => {
+  if (widgetCache.notesData) return;
+  fetchNotes(bodyNode);
+};
+
+// Marks a note done (shells to `dl note-done <id>`) and optimistically
+// removes it from the visible list rather than waiting on a re-fetch --
+// same pattern as the rest of this widget trusting a resolved run() call.
+const handleNoteDone = (noteId, bodyNode) => {
+  if (!noteId) return;
+  run(`${DL_PATH} note-done ${shellEscape(noteId)}`)
+    .then(() => {
+      if (widgetCache.notesData && widgetCache.notesData.notes) {
+        widgetCache.notesData.notes = widgetCache.notesData.notes.filter((n) => n.id !== noteId);
+      }
+      renderBody(bodyNode);
+    })
+    .catch(() => {});
 };
 
 // Small ghost icon buttons (reload / expand / copy), sharing one style so
@@ -358,6 +470,21 @@ export const render = ({ output }) => {
     if (node) syncHeaderLabel();
   };
 
+  const attachInput = (node) => {
+    inputDomNode = node;
+    if (node) syncInputMode();
+  };
+
+  const attachNoteModeIcon = (node) => {
+    noteModeIconDomNode = node;
+    if (node) syncInputMode();
+  };
+
+  const attachActionsRow = (node) => {
+    actionsRowDomNode = node;
+    if (node) syncActionsRow();
+  };
+
   // Repaint the body/header on every render pass using whichever nodes we
   // already have. On first mount this is a no-op (the *DomNode vars are
   // still null until the refs above fire); on every subsequent periodic
@@ -366,15 +493,32 @@ export const render = ({ output }) => {
   renderBody(bodyDomNode);
   syncTabStyles();
   syncHeaderLabel();
+  syncInputMode();
+  syncActionsRow();
 
   const selectTab = (updates) => {
     Object.assign(widgetCache, updates);
+    // The input's mode follows the active tab automatically -- landing on
+    // Notes should always mean Enter adds a note, not leave that dependent
+    // on remembering to also click the toggle icon separately (that gap is
+    // exactly how test typing once landed as real time entries instead of
+    // notes). The icon still lets you jot a note without leaving Day/Week.
+    widgetCache.inputMode = widgetCache.period === "notes" ? "note" : "log";
     syncTabStyles();
     syncHeaderLabel();
+    syncActionsRow();
+    syncInputMode();
     if (widgetCache.period === "week") {
       fetchWeekStatsIfNeeded(bodyDomNode);
+    } else if (widgetCache.period === "notes") {
+      fetchNotesIfNeeded(bodyDomNode);
     }
     renderBody(bodyDomNode);
+  };
+
+  const handleToggleInputMode = () => {
+    widgetCache.inputMode = widgetCache.inputMode === "note" ? "log" : "note";
+    syncInputMode();
   };
 
   const handleReload = (e) => {
@@ -390,6 +534,8 @@ export const render = ({ output }) => {
       renderBody(bodyDomNode);
       fetchWeekStats(bodyDomNode);
     } else {
+      // Reload is hidden on the Notes tab (see syncActionsRow) -- nothing
+      // to reach here for "notes", the day branch below only applies to Day.
       run(`${DL_PATH} day --json 2>/dev/null`)
         .then((out) => {
           try {
@@ -476,8 +622,34 @@ export const render = ({ output }) => {
     const text = input.value.trim();
     if (!text) return;
     input.disabled = true;
-    const originalPlaceholder = input.placeholder;
 
+    if (widgetCache.inputMode === "note") {
+      input.placeholder = "noting…";
+      run(`${DL_PATH} note ${shellEscape(text)}`)
+        .then((out) => {
+          input.value = "";
+          input.disabled = false;
+          input.placeholder = (out || "noted").trim().slice(0, 44);
+          // If the Notes tab is currently showing, refresh it immediately
+          // instead of leaving the just-added note invisible until the next
+          // tab switch; otherwise just invalidate the cache so the next
+          // visit fetches fresh.
+          if (widgetCache.period === "notes") {
+            fetchNotes(bodyDomNode);
+          } else {
+            widgetCache.notesData = null;
+          }
+          setTimeout(() => syncInputMode(), 2500);
+        })
+        .catch(() => {
+          input.disabled = false;
+          input.placeholder = "couldn't save note — try again";
+          setTimeout(() => syncInputMode(), 2500);
+        });
+      return;
+    }
+
+    const originalPlaceholder = input.placeholder;
     const gap = widgetCache.period === "day" ? mostRecentGap() : null;
     input.placeholder = gap ? `filling ${gap.start}–${gap.end}…` : "logging…";
     const cmd = gap
@@ -517,7 +689,9 @@ export const render = ({ output }) => {
           {/* A nested ref (attachHeaderLabel) rather than reusing attachDrag's
               ref on this div — React only allows one ref per element, and
               attachDrag's is already spoken for. */}
-          <span ref={attachHeaderLabel}>{widgetCache.period === "day" ? widgetCache.dayLabel : "This week"}</span>
+          <span ref={attachHeaderLabel}>
+            {widgetCache.period === "day" ? widgetCache.dayLabel : widgetCache.period === "week" ? "This week" : "Notes"}
+          </span>
         </div>
         <div
           onClick={handleCycleStyle}
@@ -535,11 +709,14 @@ export const render = ({ output }) => {
         <div ref={(n) => (tabNodes.week = n)} style={{ ...tabStyleFor(widgetCache.period === "week"), fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", userSelect: "none" }} onClick={() => selectTab({ period: "week" })}>
           Week
         </div>
+        <div ref={(n) => (tabNodes.notes = n)} style={{ ...tabStyleFor(widgetCache.period === "notes"), fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", userSelect: "none" }} onClick={() => selectTab({ period: "notes" })}>
+          Notes
+        </div>
       </div>
 
       <div ref={attachBody} />
 
-      <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+      <div ref={attachActionsRow} style={{ display: "flex", gap: 6, marginTop: 14 }}>
         <div onClick={handleReload} title="Reload the current view" style={iconButtonStyle}>
           ↻ Reload
         </div>
@@ -555,13 +732,31 @@ export const render = ({ output }) => {
         </div>
       </div>
 
-      <div style={{ marginTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 14 }}>
+      <div style={{ marginTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 14, display: "flex", gap: 6, alignItems: "center" }}>
+        <div
+          ref={attachNoteModeIcon}
+          onClick={handleToggleInputMode}
+          title='Toggle note mode: Enter adds a note/action item (dl note) instead of logging time (dl quicklog)'
+          style={{
+            flexShrink: 0,
+            fontSize: 13,
+            opacity: widgetCache.inputMode === "note" ? 1 : 0.6,
+            cursor: "pointer",
+            padding: "6px 7px",
+            borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          {widgetCache.inputMode === "note" ? "📝" : "⏱️"}
+        </div>
         <input
+          ref={attachInput}
           type="text"
-          placeholder='log something, e.g. "mtg standup 15m"'
+          placeholder={widgetCache.inputMode === "note" ? "add a note/action item…" : 'log something, e.g. "mtg standup 15m"'}
           onKeyDown={handleLogKeyDown}
           style={{
-            width: "100%",
+            flex: 1,
+            minWidth: 0,
             boxSizing: "border-box",
             padding: "8px 10px",
             borderRadius: 10,

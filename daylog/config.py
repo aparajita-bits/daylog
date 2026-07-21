@@ -13,6 +13,7 @@ CONFIG_PATH = DAYLOG_HOME / "config.yaml"
 DATA_DIR = DAYLOG_HOME / "data"
 SUMMARIES_DIR = DAYLOG_HOME / "summaries"
 STATE_DIR = DAYLOG_HOME / "state"
+NOTES_PATH = DAYLOG_HOME / "notes.json"
 HOOK_ERROR_LOG = DAYLOG_HOME / "hook-errors.log"
 
 DEFAULT_CONFIG: dict[str, Any] = {

@@ -131,7 +131,9 @@ def test_calendar_sync_still_uses_eventkit_by_default(tmp_path, monkeypatch):
 
     called = []
     monkeypatch.setattr(
-        calendar_sync_module, "fetch_events_eventkit", lambda day: called.append(1) or []
+        calendar_sync_module,
+        "fetch_events_eventkit",
+        lambda day, timeout_sec=120: called.append(1) or [],
     )
 
     calendar_sync_module.calendar_sync(date(2026, 7, 6), config_module.DEFAULT_CONFIG)

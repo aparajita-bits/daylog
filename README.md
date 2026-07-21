@@ -77,6 +77,7 @@ dl view --week                  # a full HTML report: day-by-day trend, top tick
 - [Feature deep-dives](#feature-deep-dives)
   - [Quick-entry interface](#quick-entry-interface-no-terminal-needed)
   - [Desktop widget](#desktop-widget)
+  - [Notes / action items](#notes--action-items)
   - [Auto-capture: Claude Code sessions](#auto-capture-claude-code-sessions)
   - [Gap-fill reminder](#gap-fill-reminder)
   - [Calendar sweep](#calendar-sweep)
@@ -207,25 +208,50 @@ native Calendar/Weather widgets instead of looking like a foreign object:
   <img src="docs/widget-day.png" alt="daylog desktop widget showing today's captured hours, a category breakdown, an unfilled-gap nudge, and the Reload/Report/Standup buttons" width="360">
 </p>
 
-- **Day / Week toggle** — today's captured hours and category breakdown, or
-  this week's totals, with a small nudge if `dl fill` would find anything
-  to fill
+- **Day / Week / Notes toggle** — today's captured hours and category
+  breakdown, this week's totals, or your pending notes/action items, with a
+  small nudge if `dl fill` would find anything to fill
 - **🎨 background style** — cycles Dark → Frosted → Glass → Transparent,
   persisted, so it can match your setup instead of sitting as one solid
   block among the native widgets
-- **↻ Reload** — force-refreshes whatever's currently showing, instead of
-  waiting on the 5-minute auto refresh
-- **⤢ Report** — opens the full `dl view` HTML report in your browser for
-  the current period
-- **📋 Standup** — copies `dl standup --ai` straight to your clipboard,
-  ready to paste into Teams/Slack
+- **↻ Reload / ⤢ Report / 📋 Standup** — force-refresh, open the full `dl
+  view` HTML report, or copy `dl standup --ai` to your clipboard (Day/Week
+  only — hidden on the Notes tab, none of them apply there)
 - **Inline logging** — a text box that runs `dl quicklog` directly from the
   desktop, no terminal needed; while an unfilled gap is showing, the same
   box backdates your entry into that gap's time slot instead of logging it
-  at "now"
+  at "now". A small 📝/⏱️ icon next to it toggles whether Enter adds a note
+  instead — it follows the active tab automatically (see below)
 
 See [widget/README.md](widget/README.md) for the manual setup path,
 customizing colors/position, and troubleshooting.
+
+</details>
+
+<details>
+<summary><strong>Notes / action items</strong></summary>
+
+### Notes / action items
+
+A quick, persistent place for freeform notes — "remember to follow up on X
+from standup" — separate from time-tracked entries, so they don't pollute
+`dl view`/`dl standup`/the day's actual work log:
+
+```bash
+dl note "follow up on X from standup"   # jot one
+dl notes                                 # list pending ones
+dl notes --all                           # include done ones too
+dl note-done a1b2c3d4                    # mark one done, by the id `dl notes` prints
+```
+
+Stored as a single flat `~/.daylog/notes.json`, not per-day like
+`Entry` — notes aren't tied to a particular date the way logged work is.
+
+In the desktop widget, the **Notes** tab shows the same pending list with a
+checkbox per row to mark done inline; the input box's 📝/⏱️ icon (or just
+switching to the Notes tab, which sets it automatically) routes Enter to
+`dl note` instead of `dl quicklog`. See [Desktop widget](#desktop-widget)
+above.
 
 </details>
 

@@ -41,13 +41,21 @@ should appear within a few seconds; no restart needed after the first grant.
   restarts. The default solid-dark block can clash with macOS's own white/
   frosted native widgets (Calendar, Clock, Weather) sitting nearby — this
   lets you match your setup instead of being stuck with one look.
-- A **Day / Week** tab row: today's numbers, or this week's
+- A **Day / Week / Notes** tab row: today's numbers, this week's, or your
+  pending notes/action items
   - **Day** (default): total time captured today, a bar per category, and —
     if `dl fill` would find anything to fill — a small "N gaps unfilled"
     nudge
   - **Week**: this week's total + capture rate, same category bars, via
     `dl week --json`
-- Three small action buttons below the tabs:
+  - **Notes**: a count of pending notes/action items, then the list itself
+    — freeform text jotted separately from time-tracked entries (e.g.
+    "remember to follow up on X from standup"), via `dl notes --json`. Each
+    row has a small checkbox that marks it done (`dl note-done <id>`),
+    removed from the list immediately without waiting on a refresh. The
+    Reload/Report/Standup row below the tabs is hidden while on this tab —
+    none of those apply to notes.
+- Three small action buttons below the tabs (Day/Week only, see above):
   - **↻ Reload** — re-fetches whatever's currently showing (day or week
     stats), instead of waiting for the 5-minute auto refresh.
   - **⤢ Report** — opens a full, properly-typeset HTML page (`dl view`) in
@@ -76,6 +84,11 @@ should appear within a few seconds; no restart needed after the first grant.
   showing**, the same input backdates your entry into that gap's time slot
   (via `dl quicklog --at HH:MM -d N`) instead of logging it at "now" — an
   alternative to running `dl fill` in a terminal for the most recent gap.
+  Next to it, a small icon (📝/⏱️) shows and toggles whether Enter adds a
+  note (`dl note`) or logs time (`dl quicklog`) — it follows the active tab
+  automatically (Notes tab → note mode, Day/Week → log mode), so you don't
+  have to remember to flip it by hand; click it to jot a note without
+  leaving Day/Week, or vice versa.
 
 The Day/Stats view refreshes every 5 minutes by re-running `dl day --json` —
 the same command you can run yourself to see the raw JSON (now includes

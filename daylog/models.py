@@ -77,3 +77,33 @@ class Entry:
         from datetime import timedelta
 
         return self.ts + timedelta(minutes=self.duration_min)
+
+
+@dataclass
+class Note:
+    text: str
+    id: str = field(default_factory=new_id)
+    created_at: datetime = field(default_factory=lambda: datetime.now().astimezone())
+    done: bool = False
+    done_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d = {
+            "id": self.id,
+            "text": self.text,
+            "created_at": self.created_at.isoformat(),
+            "done": self.done,
+        }
+        if self.done_at:
+            d["done_at"] = self.done_at.isoformat()
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "Note":
+        return cls(
+            id=d.get("id") or new_id(),
+            text=d["text"],
+            created_at=datetime.fromisoformat(d["created_at"]),
+            done=bool(d.get("done", False)),
+            done_at=datetime.fromisoformat(d["done_at"]) if d.get("done_at") else None,
+        )

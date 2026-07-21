@@ -9,9 +9,10 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape as rich_escape
 from rich.table import Table
 
-from daylog import gapfill, store
+from daylog import gapfill, notes, store
 from daylog.config import CONFIG_PATH, load_config
 from daylog.infer import extract_jira_key, infer_category, parse_shorthand
 from daylog.models import Entry
@@ -200,6 +201,57 @@ def quicklog(
     store.append_entry(entry)
     suffix = f" at {at}" if at else ""
     console.print(f"logged: {entry.title} ({entry.duration_min}m, {category}){suffix}")
+
+
+@app.command()
+def note(text: str = typer.Argument(..., help="Freeform note/action item text")):
+    """Jot a quick note/action item, separate from time-tracked entries."""
+    n = notes.add_note(text)
+    # rich_escape: note text is arbitrary user input and may itself contain
+    # "[...]" (e.g. a ticket key) -- escape it so Rich doesn't parse it as
+    # markup while still rendering the intentional [green] style around it.
+    console.print(f"[green]noted[/green] {rich_escape(n.text)}")
+
+
+@app.command(name="notes")
+def notes_cmd(
+    all: bool = typer.Option(False, "--all", help="Include done notes"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable output, e.g. for the desktop widget"),
+):
+    """List pending notes/action items (add --all to include done ones)."""
+    items = notes.list_notes(include_done=all)
+
+    if json_output:
+        import json as json_module
+
+        payload = {
+            "notes": [
+                {"id": n.id, "text": n.text, "created_at": n.created_at.isoformat(), "done": n.done}
+                for n in items
+            ]
+        }
+        print(json_module.dumps(payload))
+        return
+
+    if not items:
+        console.print("[dim]No pending notes[/dim]")
+        return
+    for n in items:
+        marker = "[x]" if n.done else "[ ]"
+        # markup=False: note text is arbitrary user input and the marker
+        # itself is bracketed -- Rich's console.print treats [x]/[ ] as
+        # markup tags otherwise and silently swallows them.
+        console.print(f"{marker} {n.id}  {n.text}", markup=False)
+
+
+@app.command(name="note-done")
+def note_done(note_id: str = typer.Argument(...)):
+    """Mark a note done, e.g. `dl note-done a1b2c3d4`."""
+    n = notes.mark_done(note_id)
+    if not n:
+        console.print(f"[red]No note found with id {note_id}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]done[/green] {note_id}")
 
 
 @app.command()
